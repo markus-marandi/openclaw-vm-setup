@@ -104,3 +104,6 @@
     - "SAFETY: Verify SSH login works as '{{ admin_user }}' in a new terminal before closing root session."
     - "Then run as {{ admin_user }}: openclaw onboard --install-daemon"
     - "Or run as {{ admin_user }}: openclaw tui"
+    - "Docker gateway helper (from repo root): ./openclaw-docker-helper.sh run"
+    - "Quick check: ./openclaw-docker-helper.sh verify"
+    - "Pairing: ./openclaw-docker-helper.sh devices-list && ./openclaw-docker-helper.sh devices-approve <UUID>"

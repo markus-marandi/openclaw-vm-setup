@@ -17,6 +17,12 @@ git pull
 
 ## 2) Choose one setup path
 
+Docker-only operational runbook (custom loopback port mapping, SSH tunnel, pairing):
+`docs/openclaw-docker-runbook.md`
+
+Scripted helper for the same flow:
+`./openclaw-docker-helper.sh`
+
 ### Path A: Single script on the VPS (`setup-vm.sh`)
 
 SSH to VPS as root, then run:
