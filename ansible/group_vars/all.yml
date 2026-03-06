@@ -1,0 +1,6 @@
+---
+openclaw_user: clawdbot
+openclaw_gateway_port: 18789
+openclaw_state_dir: "/home/{{ openclaw_user }}/.openclaw"
+openclaw_audit_script_src: "{{ playbook_dir }}/../nightly-security-audit.sh"
+openclaw_gateway_token: ""

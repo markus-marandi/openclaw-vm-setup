@@ -1,0 +1,128 @@
+---
+- name: Backup sshd_config
+  ansible.builtin.copy:
+    src: /etc/ssh/sshd_config
+    dest: /etc/ssh/sshd_config.bak
+    remote_src: true
+    mode: preserve
+
+- name: Disable root SSH login
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin'
+    line: 'PermitRootLogin no'
+  notify: reload ssh
+
+- name: Disable SSH password authentication
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+  notify: reload ssh
+
+- name: Set LoginGraceTime
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?LoginGraceTime'
+    line: 'LoginGraceTime 20'
+  notify: reload ssh
+
+- name: Set MaxAuthTries
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?MaxAuthTries'
+    line: 'MaxAuthTries 3'
+  notify: reload ssh
+
+- name: Restrict SSH access to admin user
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?AllowUsers'
+    line: 'AllowUsers {{ admin_user }}'
+  notify: reload ssh
+
+- name: Validate sshd config
+  ansible.builtin.command: sshd -t -f /etc/ssh/sshd_config
+  changed_when: false
+
+- name: Configure fail2ban jail.local
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [sshd]
+      enabled = true
+      backend = systemd
+      maxretry = 3
+      bantime = 3600
+
+- name: Ensure fail2ban started and enabled
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: restarted
+
+- name: Reset UFW
+  ansible.builtin.command: ufw --force reset
+  changed_when: true
+
+- name: Set UFW default deny incoming
+  ansible.builtin.command: ufw default deny incoming
+  changed_when: true
+
+- name: Set UFW default allow outgoing
+  ansible.builtin.command: ufw default allow outgoing
+  changed_when: true
+
+- name: Set UFW SSH rate limit
+  ansible.builtin.command: ufw limit ssh
+  changed_when: true
+
+- name: Deny gateway port on non-loopback
+  ansible.builtin.command: ufw deny {{ openclaw_gateway_port }}/tcp
+  changed_when: true
+
+- name: Check tailscale interface
+  ansible.builtin.command: ip link show tailscale0
+  register: tailscale_if
+  failed_when: false
+  changed_when: false
+
+- name: Allow Tailscale interface in UFW
+  ansible.builtin.command: ufw allow in on tailscale0
+  when: tailscale_if.rc == 0
+  changed_when: true
+
+- name: Ensure DOCKER-USER chain in ufw after.rules
+  ansible.builtin.blockinfile:
+    path: /etc/ufw/after.rules
+    insertbefore: '^COMMIT'
+    marker: '# {mark} OPENCLAW DOCKER-USER IPV4'
+    block: |
+      :DOCKER-USER - [0:0]
+      -A DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+      -A DOCKER-USER -s 127.0.0.0/8 -j RETURN
+      -A DOCKER-USER -s 10.0.0.0/8 -j RETURN
+      -A DOCKER-USER -s 172.16.0.0/12 -j RETURN
+      -A DOCKER-USER -s 192.168.0.0/16 -j RETURN
+      -A DOCKER-USER -s 100.64.0.0/10 -j RETURN
+      -A DOCKER-USER -j DROP
+
+- name: Ensure DOCKER-USER chain in ufw after6.rules
+  ansible.builtin.blockinfile:
+    path: /etc/ufw/after6.rules
+    insertbefore: '^COMMIT'
+    marker: '# {mark} OPENCLAW DOCKER-USER IPV6'
+    block: |
+      :DOCKER-USER - [0:0]
+      -A DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+      -A DOCKER-USER -s ::1/128 -j RETURN
+      -A DOCKER-USER -s fc00::/7 -j RETURN
+      -A DOCKER-USER -j DROP
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Enable UFW
+  ansible.builtin.command: ufw --force enable
+  changed_when: true

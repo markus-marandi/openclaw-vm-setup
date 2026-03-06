@@ -1,0 +1,22 @@
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "loopback",
+    "port": {{ openclaw_gateway_port }},
+    "auth": { "mode": "token", "token": "{{ effective_gateway_token }}" }
+  },
+  "session": { "dmScope": "per-channel-peer" },
+  "tools": {
+    "exec": { "security": "deny", "ask": "always" },
+    "elevated": { "enabled": false },
+    "deny": ["gateway", "cron", "sessions_spawn", "sessions_send"],
+    "fs": { "workspaceOnly": true }
+  },
+  "agents": {
+    "defaults": {
+      "sandbox": { "mode": "all", "scope": "agent", "workspaceAccess": "none" }
+    }
+  },
+  "discovery": { "mdns": { "mode": "minimal" } },
+  "logging": { "redactSensitive": "tools" }
+}

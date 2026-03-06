@@ -1,0 +1,13 @@
+---
+- name: reload ssh
+  ansible.builtin.shell: |
+    if systemctl cat ssh.service >/dev/null 2>&1; then
+      systemctl reload-or-restart ssh
+    elif systemctl cat sshd.service >/dev/null 2>&1; then
+      systemctl reload-or-restart sshd
+    else
+      echo "Missing ssh service unit" >&2
+      exit 1
+    fi
+  args:
+    executable: /bin/bash

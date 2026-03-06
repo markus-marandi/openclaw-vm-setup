@@ -1,0 +1,30 @@
+---
+- name: Bootstrap and harden OpenClaw VM
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars_prompt:
+  - name: admin_user
+    prompt: "Admin username"
+    private: false
+  - name: admin_ssh_public_key
+    prompt: "Admin SSH public key"
+    private: false
+  - name: tailscale_auth_key
+    prompt: "Tailscale auth key (optional, press enter to skip)"
+    private: true
+    default: ""
+
+  pre_tasks:
+  - name: Validate admin username format
+    ansible.builtin.assert:
+      that:
+      - admin_user is match('^[a-z_][a-z0-9_-]{0,31}$')
+      fail_msg: "admin_user must match ^[a-z_][a-z0-9_-]{0,31}$"
+
+  roles:
+  - role: common
+  - role: users
+  - role: security
+  - role: openclaw
