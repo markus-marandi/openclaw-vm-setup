@@ -1,0 +1,6 @@
+---
+# Copy to group_vars/vault.yml and encrypt it with:
+# ansible-vault encrypt group_vars/vault.yml
+
+vault_tailscale_auth_key: ""
+vault_openclaw_gateway_token: ""

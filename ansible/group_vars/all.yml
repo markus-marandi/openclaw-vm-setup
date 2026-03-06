@@ -3,4 +3,27 @@ openclaw_user: clawdbot
 openclaw_gateway_port: 18789
 openclaw_state_dir: "/home/{{ openclaw_user }}/.openclaw"
 openclaw_audit_script_src: "{{ playbook_dir }}/../nightly-security-audit.sh"
-openclaw_gateway_token: ""
+openclaw_audit_cron_minute: "0"
+openclaw_audit_cron_hour: "3"
+
+# Set this to a major version string like "20" to pin Node.js via NodeSource.
+# Leave empty to use distro nodejs/npm packages.
+nodejs_major: ""
+
+# Set to a fixed version (e.g. "1.2.3") for deterministic installs.
+# Use "latest" to track npm latest tag.
+openclaw_version: "latest"
+
+# If true, Ansible enforces openclaw.json template on every run.
+# Set false to keep existing file once created.
+openclaw_manage_config_drift: true
+
+# Docker apt repo architecture mapping for common VPS CPU strings.
+docker_arch_map:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: armhf
+
+# Secrets should come from vault vars in group_vars/vault.yml.
+tailscale_auth_key: "{{ vault_tailscale_auth_key | default('') }}"
+openclaw_gateway_token: "{{ vault_openclaw_gateway_token | default('') }}"

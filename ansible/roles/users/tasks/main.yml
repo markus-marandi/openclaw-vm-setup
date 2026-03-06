@@ -82,22 +82,27 @@
   register: openclaw_installed_version
   changed_when: false
 
-- name: Read latest OpenClaw version from npm
+- name: Resolve target OpenClaw version from npm latest
   ansible.builtin.command: npm view openclaw version
   become_user: "{{ admin_user }}"
   environment:
     HOME: "/home/{{ admin_user }}"
     PATH: "/home/{{ admin_user }}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
-  register: openclaw_latest_version
+  register: openclaw_resolved_latest_version
+  when: openclaw_version == "latest"
   changed_when: false
 
+- name: Set target OpenClaw version fact
+  ansible.builtin.set_fact:
+    openclaw_target_version: "{{ openclaw_resolved_latest_version.stdout if openclaw_version == 'latest' else openclaw_version }}"
+
 - name: Install or update OpenClaw CLI for admin
-  ansible.builtin.command: npm install -g openclaw@latest
+  ansible.builtin.command: npm install -g openclaw@{{ openclaw_version }}
   become_user: "{{ admin_user }}"
   environment:
     HOME: "/home/{{ admin_user }}"
     PATH: "/home/{{ admin_user }}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
-  when: openclaw_installed_version.stdout != openclaw_latest_version.stdout
+  when: openclaw_installed_version.stdout != openclaw_target_version
   changed_when: true
 
 - name: Ensure npm global path in admin profile

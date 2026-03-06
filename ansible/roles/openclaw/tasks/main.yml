@@ -46,7 +46,7 @@
     owner: "{{ openclaw_user }}"
     group: "{{ openclaw_user }}"
     mode: "0600"
-    force: false
+    force: "{{ openclaw_manage_config_drift | bool }}"
 
 - name: Ensure paired.json exists
   ansible.builtin.copy:
@@ -65,11 +65,27 @@
     group: "{{ openclaw_user }}"
     mode: "0700"
 
-- name: Try to set immutable flag on nightly audit script
-  ansible.builtin.command: chattr +i {{ openclaw_state_dir }}/workspace/scripts/nightly-security-audit.sh
-  register: chattr_result
+- name: Install nightly audit cron job for clawdbot
+  ansible.builtin.cron:
+    name: openclaw-nightly-security-audit
+    user: "{{ openclaw_user }}"
+    minute: "{{ openclaw_audit_cron_minute }}"
+    hour: "{{ openclaw_audit_cron_hour }}"
+    job: "{{ openclaw_state_dir }}/workspace/scripts/nightly-security-audit.sh"
+    state: present
+
+- name: Check immutable flag on nightly audit script
+  ansible.builtin.command: lsattr {{ openclaw_state_dir }}/workspace/scripts/nightly-security-audit.sh
+  register: audit_script_lsattr
   failed_when: false
-  changed_when: chattr_result.rc == 0
+  changed_when: false
+
+- name: Set immutable flag on nightly audit script when missing
+  ansible.builtin.command: chattr +i {{ openclaw_state_dir }}/workspace/scripts/nightly-security-audit.sh
+  when:
+  - audit_script_lsattr.rc == 0
+  - "'i' not in ((audit_script_lsattr.stdout.split() | first) | default(''))"
+  changed_when: true
 
 - name: Generate config baseline hash as clawdbot
   ansible.builtin.shell: |

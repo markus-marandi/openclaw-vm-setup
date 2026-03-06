@@ -64,25 +64,31 @@
     enabled: true
     state: restarted
 
-- name: Reset UFW
-  ansible.builtin.command: ufw --force reset
-  changed_when: true
+- name: Read UFW status before rule updates
+  ansible.builtin.command: ufw status verbose
+  register: ufw_status_before
+  failed_when: false
+  changed_when: false
 
 - name: Set UFW default deny incoming
   ansible.builtin.command: ufw default deny incoming
+  when: "'Default: deny (incoming)' not in (ufw_status_before.stdout | default(''))"
   changed_when: true
 
 - name: Set UFW default allow outgoing
   ansible.builtin.command: ufw default allow outgoing
+  when: "'allow (outgoing)' not in (ufw_status_before.stdout | default(''))"
   changed_when: true
 
 - name: Set UFW SSH rate limit
   ansible.builtin.command: ufw limit ssh
-  changed_when: true
+  register: ufw_limit_ssh
+  changed_when: "'skipping adding existing rule' not in (((ufw_limit_ssh.stdout | default('')) ~ ' ' ~ (ufw_limit_ssh.stderr | default(''))) | lower)"
 
 - name: Deny gateway port on non-loopback
   ansible.builtin.command: ufw deny {{ openclaw_gateway_port }}/tcp
-  changed_when: true
+  register: ufw_deny_gateway
+  changed_when: "'skipping adding existing rule' not in (((ufw_deny_gateway.stdout | default('')) ~ ' ' ~ (ufw_deny_gateway.stderr | default(''))) | lower)"
 
 - name: Check tailscale interface
   ansible.builtin.command: ip link show tailscale0
@@ -93,7 +99,8 @@
 - name: Allow Tailscale interface in UFW
   ansible.builtin.command: ufw allow in on tailscale0
   when: tailscale_if.rc == 0
-  changed_when: true
+  register: ufw_allow_tailscale
+  changed_when: "'skipping adding existing rule' not in (((ufw_allow_tailscale.stdout | default('')) ~ ' ' ~ (ufw_allow_tailscale.stderr | default(''))) | lower)"
 
 - name: Ensure DOCKER-USER chain in ufw after.rules
   ansible.builtin.blockinfile:
@@ -125,4 +132,36 @@
 
 - name: Enable UFW
   ansible.builtin.command: ufw --force enable
-  changed_when: true
+  register: ufw_enable
+  changed_when: "'already enabled' not in ((((ufw_enable.stdout | default('')) ~ ' ' ~ (ufw_enable.stderr | default(''))) | lower))"
+
+- name: Validation check - sshd config syntax
+  ansible.builtin.command: sshd -t -f /etc/ssh/sshd_config
+  register: validate_sshd
+  changed_when: false
+
+- name: Validation check - UFW status
+  ansible.builtin.command: ufw status verbose
+  register: validate_ufw_status
+  changed_when: false
+
+- name: Validation check - IPv4 DOCKER-USER chain
+  ansible.builtin.command: iptables -S DOCKER-USER
+  register: validate_iptables_docker_user
+  failed_when: false
+  changed_when: false
+
+- name: Validation check - IPv6 DOCKER-USER chain
+  ansible.builtin.command: ip6tables -S DOCKER-USER
+  register: validate_ip6tables_docker_user
+  failed_when: false
+  changed_when: false
+
+- name: Print compact validation summary
+  ansible.builtin.debug:
+    msg:
+    - "Validation summary"
+    - "sshd -t rc={{ validate_sshd.rc }}"
+    - "ufw status: {{ (validate_ufw_status.stdout_lines | default([]) | first | default('unknown')) }}"
+    - "iptables DOCKER-USER rc={{ validate_iptables_docker_user.rc }}"
+    - "ip6tables DOCKER-USER rc={{ validate_ip6tables_docker_user.rc }}"

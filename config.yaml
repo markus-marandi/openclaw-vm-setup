@@ -13,7 +13,7 @@ security:
     provider: "lakera" # Options: lakera, promptarmor, custom
     endpoint: "https://api.lakera.ai/v2/guard"
     # Provide the API key for the guard service here:
-    api_key: "b9b4...5db9" # <-- Replace with your actual full key 'clawdbot'
+    api_key: "" # <-- Replace with your actual full key 'clawdbot'
     # Action to take if injection is detected
     on_detect: "hard_abort" # Options: hard_abort, warn_and_continue, ask_human
 
@@ -29,8 +29,8 @@ security:
     dangerouslyAllowPrivateNetwork: false
     # List domains the browser is allowed to access
     hostnameAllowlist:
-      - "*.github.com"
-      - "api.trusted-service.com"
+    - "*.github.com"
+    - "api.trusted-service.com"
     # Explicit exceptions, leave empty normally
     allowedHostnames: []
 

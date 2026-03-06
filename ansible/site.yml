@@ -4,6 +4,9 @@
   become: true
   gather_facts: true
 
+  vars_files:
+  - group_vars/vault.yml
+
   vars_prompt:
   - name: admin_user
     prompt: "Admin username"
@@ -11,10 +14,6 @@
   - name: admin_ssh_public_key
     prompt: "Admin SSH public key"
     private: false
-  - name: tailscale_auth_key
-    prompt: "Tailscale auth key (optional, press enter to skip)"
-    private: true
-    default: ""
 
   pre_tasks:
   - name: Validate admin username format
