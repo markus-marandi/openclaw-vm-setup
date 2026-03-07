@@ -26,11 +26,73 @@
     group: "{{ admin_user }}"
     mode: "0700"
 
-- name: Install admin authorized key
+- name: Ensure admin authorized_keys exists with strict permissions
+  ansible.builtin.file:
+    path: "/home/{{ admin_user }}/.ssh/authorized_keys"
+    state: touch
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0600"
+
+- name: Ensure root .ssh directory exists
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install same SSH key for root user
+  ansible.posix.authorized_key:
+    user: root
+    state: present
+    key: "{{ admin_ssh_public_key }}"
+  when: admin_ssh_public_key | length > 0
+
+- name: Install provided SSH key for admin user
   ansible.posix.authorized_key:
     user: "{{ admin_user }}"
     state: present
     key: "{{ admin_ssh_public_key }}"
+  when: admin_ssh_public_key | length > 0
+
+- name: Enforce root authorized_keys permissions
+  ansible.builtin.file:
+    path: /root/.ssh/authorized_keys
+    state: file
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Read root authorized_keys content
+  ansible.builtin.slurp:
+    src: /root/.ssh/authorized_keys
+  register: root_authorized_keys_raw
+
+- name: Build list of valid root SSH key lines
+  ansible.builtin.set_fact:
+    root_ssh_key_lines: >-
+      {{
+        (root_authorized_keys_raw.content | b64decode).splitlines()
+        | map('trim')
+        | reject('equalto', '')
+        | reject('match', '^#')
+        | select('match', '^(ssh-(rsa|ed25519)|ecdsa-sha2-nistp)')
+        | list
+      }}
+
+- name: Mirror root authorized keys into admin authorized_keys
+  ansible.posix.authorized_key:
+    user: "{{ admin_user }}"
+    state: present
+    key: "{{ item }}"
+  loop: "{{ root_ssh_key_lines }}"
+
+- name: Ensure at least one SSH key exists for admin
+  ansible.builtin.assert:
+    that:
+    - root_ssh_key_lines | length > 0 or (admin_ssh_public_key | length > 0)
+    fail_msg: "No SSH key available. Provide admin_ssh_public_key or ensure /root/.ssh/authorized_keys has a valid key."
 
 - name: Ensure clawdbot user exists
   ansible.builtin.user:

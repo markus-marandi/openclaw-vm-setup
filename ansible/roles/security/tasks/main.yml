@@ -6,11 +6,11 @@
     remote_src: true
     mode: preserve
 
-- name: Disable root SSH login
+- name: Allow root SSH key login only
   ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^#?PermitRootLogin'
-    line: 'PermitRootLogin no'
+    line: 'PermitRootLogin prohibit-password'
   notify: reload ssh
 
 - name: Disable SSH password authentication
@@ -34,11 +34,11 @@
     line: 'MaxAuthTries 3'
   notify: reload ssh
 
-- name: Restrict SSH access to admin user
+- name: Restrict SSH access to admin user and root
   ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^#?AllowUsers'
-    line: 'AllowUsers {{ admin_user }}'
+    line: 'AllowUsers {{ admin_user }} root'
   notify: reload ssh
 
 - name: Validate sshd config

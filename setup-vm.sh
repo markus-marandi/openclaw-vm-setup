@@ -7,8 +7,8 @@ trap 'rm -f /root/after.rules.tmp.* /root/after6.rules.tmp.* 2>/dev/null || true
 
 # --- Configuration ---
 OPENCLAW_USER="clawdbot"
-ADMIN_USER="${1:?Usage: $0 <admin-username> <ssh-public-key> [tailscale-auth-key]}"
-ADMIN_SSH_PUBKEY="${2:?Usage: $0 <admin-username> <ssh-public-key> [tailscale-auth-key]}"
+ADMIN_USER="${1:?Usage: $0 <admin-username> [ssh-public-key] [tailscale-auth-key]}"
+ADMIN_SSH_PUBKEY="${2:-}"
 TAILSCALE_AUTH_KEY="${3:-}"
 
 if ! [[ "$ADMIN_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
@@ -107,14 +107,46 @@ install -d -m 755 -o "$ADMIN_USER" -g "$ADMIN_USER" "$ADMIN_HOME"
 echo "Ensuring $ADMIN_USER is in sudo group..."
 usermod -aG sudo "$ADMIN_USER"
 
-echo "Installing SSH key for $ADMIN_USER..."
+echo "Ensuring SSH key files exist with strict permissions..."
+install -d -m 700 -o root -g root /root/.ssh
+ROOT_AUTH_KEYS_FILE="/root/.ssh/authorized_keys"
+touch "$ROOT_AUTH_KEYS_FILE"
+chmod 600 "$ROOT_AUTH_KEYS_FILE"
+chown root:root "$ROOT_AUTH_KEYS_FILE"
+
 install -d -m 700 -o "$ADMIN_USER" -g "$ADMIN_USER" "$ADMIN_HOME/.ssh"
-AUTH_KEYS_FILE="$ADMIN_HOME/.ssh/authorized_keys"
-touch "$AUTH_KEYS_FILE"
-chmod 600 "$AUTH_KEYS_FILE"
-chown "$ADMIN_USER:$ADMIN_USER" "$AUTH_KEYS_FILE"
-if ! grep -Fxq "$ADMIN_SSH_PUBKEY" "$AUTH_KEYS_FILE"; then
-  printf '%s\n' "$ADMIN_SSH_PUBKEY" >> "$AUTH_KEYS_FILE"
+ADMIN_AUTH_KEYS_FILE="$ADMIN_HOME/.ssh/authorized_keys"
+touch "$ADMIN_AUTH_KEYS_FILE"
+chmod 600 "$ADMIN_AUTH_KEYS_FILE"
+chown "$ADMIN_USER:$ADMIN_USER" "$ADMIN_AUTH_KEYS_FILE"
+
+add_key_if_missing() {
+  local key_line="$1"
+  local target_file="$2"
+  [ -n "$key_line" ] || return 0
+  if ! grep -Fxq "$key_line" "$target_file"; then
+    printf '%s\n' "$key_line" >> "$target_file"
+  fi
+}
+
+echo "Syncing SSH keys between root and $ADMIN_USER..."
+# Copy all existing root authorized keys to admin.
+while IFS= read -r key_line || [ -n "$key_line" ]; do
+  [[ "$key_line" =~ ^[[:space:]]*$ ]] && continue
+  [[ "$key_line" =~ ^[[:space:]]*# ]] && continue
+  add_key_if_missing "$key_line" "$ADMIN_AUTH_KEYS_FILE"
+done < "$ROOT_AUTH_KEYS_FILE"
+
+# If a key argument is provided, ensure it exists for both admin and root.
+if [ -n "$ADMIN_SSH_PUBKEY" ]; then
+  add_key_if_missing "$ADMIN_SSH_PUBKEY" "$ADMIN_AUTH_KEYS_FILE"
+  add_key_if_missing "$ADMIN_SSH_PUBKEY" "$ROOT_AUTH_KEYS_FILE"
+fi
+
+if ! grep -Eq '^(ssh-(rsa|ed25519)|ecdsa-sha2-nistp)' "$ADMIN_AUTH_KEYS_FILE"; then
+  echo "❌ CRITICAL: No valid SSH public key found for $ADMIN_USER."
+  echo "   Provide key as arg #2 or ensure /root/.ssh/authorized_keys already contains one."
+  exit 1
 fi
 
 echo "Installing OpenClaw CLI for $ADMIN_USER in $ADMIN_HOME/.npm-global..."
@@ -210,7 +242,7 @@ SSHD_CONFIG="/etc/ssh/sshd_config"
 cp "$SSHD_CONFIG" "${SSHD_CONFIG}.bak"
 
 # Hardening settings
-sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' "$SSHD_CONFIG"
+sed -i 's/^#*PermitRootLogin.*/PermitRootLogin prohibit-password/' "$SSHD_CONFIG"
 sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' "$SSHD_CONFIG"
 
 # Advanced SSH lockdown (Add if they don't exist, or replace)
@@ -219,9 +251,9 @@ if ! grep -q "^MaxAuthTries" "$SSHD_CONFIG"; then echo "MaxAuthTries 3" >> "$SSH
 
 # Ensure only the admin user is explicitly allowed (WARN: This locks out clawdbot from SSH entirely)
 if ! grep -q "^AllowUsers" "$SSHD_CONFIG"; then 
-  echo "AllowUsers $ADMIN_USER" >> "$SSHD_CONFIG"
+  echo "AllowUsers $ADMIN_USER root" >> "$SSHD_CONFIG"
 else 
-  sed -i "s/^#*AllowUsers.*/AllowUsers $ADMIN_USER/" "$SSHD_CONFIG"
+  sed -i "s/^#*AllowUsers.*/AllowUsers $ADMIN_USER root/" "$SSHD_CONFIG"
 fi
 
 # Validate sshd config before restarting to prevent lockout

@@ -35,6 +35,19 @@ Populate these vault vars:
 
 If left empty, Tailscale auth is skipped and OpenClaw token is generated on first run.
 
+Example with no tokens yet:
+
+```yaml
+vault_tailscale_auth_key: ""
+vault_openclaw_gateway_token: ""
+```
+
+Later, on the VPS, you can authenticate Tailscale interactively:
+
+```bash
+sudo tailscale up
+```
+
 ## Pinning
 
 - `nodejs_major`: set to a major like `20` to use NodeSource and pin Node.js channel.
